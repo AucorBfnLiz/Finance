@@ -25,8 +25,9 @@ def compare_9500():
 
 
     # === Upload 9500 from Evolution
-    st.header("📥 Step 1: Upload 9500 Excel from Evolution")
+    st.subheader("📥 Step 1: Upload 9500 Excel from Evolution")
     file_a = st.file_uploader("Upload Excel A", type=["xlsx"], key="file_a")
+    
 
     if file_a:
         df_a = pd.read_excel(file_a).iloc[:, :9]
@@ -92,7 +93,7 @@ def compare_9500():
         st.dataframe(df_a)
 
     # === Upload 9500 Reconciliation File
-    st.header("📥 Step 2: Upload 9500 Reconciliation and select the sheet")
+    st.subheader("📥 Step 2: Upload 9500 Reconciliation and select the sheet")
     file_b = st.file_uploader("Upload Excel B", type=["xlsx"], key="file_b")
 
     if file_b:
@@ -159,7 +160,7 @@ def compare_9500():
         st.dataframe(df_b)
 
     # === Comparison ===
-    st.header("🔍 Step 3: Compare the Data")
+    st.subheader("🔍 Step 3: Compare the Data")
     if file_a and file_b:
         df_a_clean = df_a.dropna(how="all").fillna("")
         df_b_clean = df_b.dropna(how="all").fillna("")
