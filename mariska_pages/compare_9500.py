@@ -3,7 +3,7 @@ import pandas as pd
 import io
 
 def compare_9500():
-    st.title("📊 Compare 9500 from Evolution with the 9500 Reconciliation")
+    st.title("Compare 9500 from Evolution with the 9500 Reconciliation")
 
     with st.expander("ℹ️ Instructions"):
         st.markdown("""
@@ -23,6 +23,12 @@ def compare_9500():
     - **Sheet B** should ideally be **empty**. If not, it means that an item exists in both sheets but differs in one or more columns, preventing a match.
         """)
 
+    # Let user choose number of columns to compare
+    num_columns = st.number_input(
+        " Number of columns to compare", min_value=1, max_value=50, value=9, step=1
+    )
+    
+
 
     # === Upload 9500 from Evolution
     st.subheader("📥 Step 1: Upload 9500 Excel from Evolution")
@@ -30,7 +36,7 @@ def compare_9500():
     
 
     if file_a:
-        df_a = pd.read_excel(file_a).iloc[:, :9]
+        df_a = pd.read_excel(file_a).iloc[:, :num_columns]
         df_a.columns = df_a.columns.str.strip()
 
         # Clean 'Debit' and 'Credit'
@@ -101,7 +107,7 @@ def compare_9500():
         sheet_names_b = xls_b.sheet_names
         selected_sheet_b = st.selectbox("Select a sheet from Excel B:", sheet_names_b)
 
-        df_b = pd.read_excel(file_b, sheet_name=selected_sheet_b).iloc[:, :9]
+        df_b = pd.read_excel(file_b, sheet_name=selected_sheet_b).iloc[:, :num_columns]
         df_b.columns = df_b.columns.str.strip()
 
         for col in ["Debit", "Credit"]:
@@ -159,60 +165,83 @@ def compare_9500():
         st.markdown("**Preview of first 9 columns:**")
         st.dataframe(df_b)
 
-    # === Comparison ===
-    st.subheader("🔍 Step 3: Compare the Data")
-    if file_a and file_b:
-        df_a_clean = df_a.dropna(how="all").fillna("")
-        df_b_clean = df_b.dropna(how="all").fillna("")
+        # === Comparison ===
+        st.subheader("🔍 Step 3: Compare the Data")
+        if file_a and file_b:
+            df_a_clean = df_a.dropna(how="all").fillna("")
+            df_b_clean = df_b.dropna(how="all").fillna("")
 
-        for col in df_a_clean.columns:
-            if "date" in col.lower():
-                df_a_clean[col] = pd.to_datetime(df_a_clean[col], errors="coerce").dt.date
-                df_b_clean[col] = pd.to_datetime(df_b_clean[col], errors="coerce").dt.date
-            elif col.lower() in ["debit", "credit"]:
-                df_a_clean[col] = pd.to_numeric(df_a_clean[col], errors="coerce").round(2)
-                df_b_clean[col] = pd.to_numeric(df_b_clean[col], errors="coerce").round(2)
-            else:
-                df_a_clean[col] = df_a_clean[col].astype(str)
-                df_b_clean[col] = df_b_clean[col].astype(str)
+            for col in df_a_clean.columns:
+                if "date" in col.lower():
+                    df_a_clean[col] = pd.to_datetime(df_a_clean[col], errors="coerce").dt.date
+                    df_b_clean[col] = pd.to_datetime(df_b_clean[col], errors="coerce").dt.date
+                elif col.lower() in ["debit", "credit"]:
+                    df_a_clean[col] = pd.to_numeric(df_a_clean[col], errors="coerce").round(2)
+                    df_b_clean[col] = pd.to_numeric(df_b_clean[col], errors="coerce").round(2)
+                else:
+                    df_a_clean[col] = df_a_clean[col].astype(str)
+                    df_b_clean[col] = df_b_clean[col].astype(str)
 
-        only_in_a = pd.merge(df_a_clean, df_b_clean, how="outer", indicator=True)\
-            .query("_merge == 'left_only'").drop(columns=["_merge"])
-        st.markdown(f"### 📌 Rows that are **only in Excel A**: {len(only_in_a)}")
-        st.dataframe(only_in_a)
+            only_in_a = pd.merge(df_a_clean, df_b_clean, how="outer", indicator=True)\
+                .query("_merge == 'left_only'").drop(columns=["_merge"])
+            st.markdown(f"### 📌 Rows that are **only in Excel A**: {len(only_in_a)}")
+            st.dataframe(only_in_a)
 
-        only_in_b = pd.merge(df_b_clean, df_a_clean, how="outer", indicator=True)\
-            .query("_merge == 'left_only'").drop(columns=["_merge"])
-        st.markdown(f"### 📌 Rows that are **only in Excel B**: {len(only_in_b)}")
-        st.dataframe(only_in_b)
+            only_in_b = pd.merge(df_b_clean, df_a_clean, how="outer", indicator=True)\
+                .query("_merge == 'left_only'").drop(columns=["_merge"])
+            st.markdown(f"### 📌 Rows that are **only in Excel B**: {len(only_in_b)}")
+            st.dataframe(only_in_b)
 
-        # Export options
-        def to_excel(df, sheet_name="Sheet1"):
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                df.to_excel(writer, index=False, sheet_name=sheet_name)
-            return output.getvalue()
-        
-        
+            # Export options
+            def to_excel(df, sheet_name="Sheet1"):
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                    df.to_excel(writer, index=False, sheet_name=sheet_name)
+                return output.getvalue()
 
-        
+            st.markdown("### ⬇️ Download Differences")
 
+            if not only_in_a.empty:
+                st.download_button(
+                    label="📥 Download: Only in Excel A",
+                    data=to_excel(only_in_a, sheet_name="Only in A"),
+                    file_name="differences_only_in_A.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
 
+            if not only_in_b.empty:
+                st.download_button(
+                    label="📥 Download: Only in Excel B",
+                    data=to_excel(only_in_b, sheet_name="Only in B"),
+                    file_name="differences_only_in_B.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
 
-        st.markdown("### ⬇️ Download Differences")
+            # --- Extract Code Button ---
+            if st.button("🧾 Extract Code"):
+                df_a_clean["Note"] = df_a_clean["Description"]
 
-        if not only_in_a.empty:
-            st.download_button(
-                label="📥 Download: Only in Excel A",
-                data=to_excel(only_in_a, sheet_name="Only in A"),
-                file_name="differences_only_in_A.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+                # Remove specific phrases from Note
+                phrases_to_remove = [
+                    "FNB APP PAYMENT FROM",
+                    "ACB CREDIT CAPITEC",
+                    "DIGITAL PAYMENT CR ABSA BANK"
+                ]
+                for phrase in phrases_to_remove:
+                    df_a_clean["Note"] = df_a_clean["Note"].str.replace(phrase, "", regex=False).str.strip()
 
-        if not only_in_b.empty:
-            st.download_button(
-                label="📥 Download: Only in Excel B",
-                data=to_excel(only_in_b, sheet_name="Only in B"),
-                file_name="differences_only_in_B.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+                # Add TOTAL column
+                if "Debit" in df_a_clean.columns and "Credit" in df_a_clean.columns:
+                    df_a_clean["TOTAL"] = df_a_clean["Debit"] + df_a_clean["Credit"]
+
+                st.success("Code extracted successfully. 'Note' and 'TOTAL' columns added.")
+                st.dataframe(df_a_clean.head(10))
+
+                # ✅ Show download button after extraction
+                st.markdown("### ⬇️ Download Extracted Data")
+                st.download_button(
+                    label="📥 Download Extracted Excel A",
+                    data=to_excel(df_a_clean, sheet_name="Extracted A"),
+                    file_name="extracted_excel_a.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
