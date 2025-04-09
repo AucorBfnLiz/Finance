@@ -1,94 +1,260 @@
-import ttkbootstrap as ttk
-from ttkbootstrap.constants import *
-from ttkbootstrap.widgets import Notebook
-
-import pandas as pd
-from tkinter import filedialog
 import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+import pandas as pd
+from datetime import datetime
 
-def open_compare_9500_window():
-    win = ttk.Toplevel(title="Compare 9500 Tool")
+class DepositImportApp:
+    def __init__(self, frame):
+        self.frame = frame
+        self.df = None
+        self.init_ui()
+
+    def init_ui(self):
+        tk.Label(self.frame, text="🏦 Import Deposits to 9500", font=("Arial", 16)).pack(pady=10)
+
+        instructions = (
+            "1️⃣ Upload Excel with columns:\n"
+            "- Date, Reference 2, Code, Reference, Description, Credit\n\n"
+            "2️⃣ It will be formatted for Evolution.\n"
+            "3️⃣ You can preview and export it as CSV."
+        )
+        tk.Label(self.frame, text=instructions, justify="left").pack(pady=5)
+
+        tk.Button(self.frame, text="📥 Upload Excel", command=self.load_excel).pack(pady=10)
+        tk.Button(self.frame, text="⬇️ Download CSV", command=self.download_csv).pack(pady=5)
+        tk.Button(self.frame, text="🔙 Back", command=self.go_back).pack(pady=10)
+
+        self.preview = tk.Text(self.frame, height=10, width=60)
+        self.preview.pack()
+
+    def go_back(self):
+        self.frame.master.main_menu()
+
+    def load_excel(self):
+        path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
+        if not path:
+            return
+
+        try:
+            df = pd.read_excel(path)
+            df.columns = df.columns.str.strip()
+
+            required = ["Date", "Description", "Credit", "Code", "Reference"]
+            if any(col not in df.columns for col in required):
+                messagebox.showerror("Missing Columns", f"File must contain: {', '.join(required)}")
+                return
+
+            df['Reference'] = df['Reference'].astype(str).str.strip()
+
+            modified = pd.DataFrame()
+            modified["TxDate"] = df["Date"]
+            modified["Description"] = df["Description"]
+            modified["Reference"] = df["Code"].astype(str) + df["Reference"].astype(str)
+            modified["Amount"] = df["Credit"]
+            modified["UseTax"] = "N"
+            modified["TaxType"] = ""
+            modified["TaxAccount"] = ""
+            modified["TaxAmount"] = 0
+            modified["Project"] = ""
+            modified["Account"] = "9500/BLM/027"
+            modified["IsDebit"] = "Y"
+            modified["SplitType"] = 0
+            modified["SplitGroup"] = 0
+            modified["Reconcile"] = "N"
+            modified["PostDated"] = "N"
+            modified["UseDiscount"] = "N"
+            modified["DiscPerc"] = 0
+            modified["DiscTrCode"] = ""
+            modified["DiscDesc"] = ""
+            modified["UseDiscTax"] = "N"
+            modified["DiscTaxType"] = ""
+            modified["DiscTaxAcc"] = ""
+            modified["DiscTaxAmt"] = 0
+            modified["PayeeName"] = ""
+            modified["PrintCheque"] = "N"
+            modified["SalesRep"] = ""
+            modified["Module"] = 0
+            modified["SagePayExtra1"] = ""
+            modified["SagePayExtra2"] = ""
+            modified["SagePayExtra3"] = ""
+
+            # Clean descriptions and references
+            phrases = [
+                "FNB APP PAYMENT FROM", "DIGITAL PAYMENT CR ABSA BANK", "CAPITEC",
+                "ACB CREDIT CAPITEC", "FNB OB PMT", "PayShap Ext Credit",
+                "INT-BANKING PMT FRM", "IMMEDIATE TRF CR CAPITEC",
+                "IMMEDIATE TRF CR", "ACB CREDIT", "INVESTECPB"
+            ]
+            modified["Description"] = modified["Description"].replace(phrases, '', regex=True).str.strip()
+            modified["Reference"] = modified["Reference"].str.strip().str.replace(r"\.0$", "", regex=True)
+
+            self.df = modified
+            self.preview.delete("1.0", tk.END)
+            self.preview.insert(tk.END, str(modified.head()))
+
+            messagebox.showinfo("Success", "Excel processed successfully.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Something went wrong:\n{e}")
+
+    def download_csv(self):
+        if self.df is None:
+            messagebox.showwarning("Missing", "Please upload and process a file first.")
+            return
+
+        path = filedialog.asksaveasfilename(defaultextension=".csv",
+                                            initialfile=f"IMPORT_{datetime.today().strftime('%Y-%m-%d')}.csv")
+        if path:
+            self.df.to_csv(path, index=False)
+            messagebox.showinfo("Exported", f"CSV saved to:\n{path}")
 
 
-    win.geometry("1000x600")
+class Compare9500App:
+    def __init__(self, frame):
+        self.frame = frame
+        self.df_a = None
+        self.df_b = None
+        self.init_ui()
 
-    def load_excel(tree, path_var):
-        file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
-        if file_path:
-            path_var.set(file_path)
-            df = pd.read_excel(file_path).iloc[:, :9]
-            update_treeview(tree, df)
+    def init_ui(self):
+        tk.Label(self.frame, text="📊 Compare 9500", font=("Arial", 16)).pack(pady=10)
 
-    def update_treeview(tree, df):
-        tree.delete(*tree.get_children())
-        tree["columns"] = list(df.columns)
-        tree["show"] = "headings"
-        for col in df.columns:
-            tree.heading(col, text=col)
-            tree.column(col, width=100)
-        for _, row in df.iterrows():
-            tree.insert("", "end", values=list(row))
+        self.column_var = tk.IntVar(value=9)
+        tk.Label(self.frame, text="Number of columns to compare:").pack()
+        tk.Spinbox(self.frame, from_=1, to=50, textvariable=self.column_var).pack(pady=5)
 
-    # Excel A
-    file_a_var = tk.StringVar()
-    ttk.Label(win, text="Upload Excel A (9500 from Evolution)").pack(anchor="w", padx=10, pady=(10, 0))
-    ttk.Entry(win, textvariable=file_a_var, width=80, state="readonly").pack(padx=10)
-    tree_a = ttk.Treeview(win)
-    tree_a.pack(padx=10, pady=5, fill="both", expand=True)
-    ttk.Button(win, text="Browse A", bootstyle="primary", command=lambda: load_excel(tree_a, file_a_var)).pack(padx=10, pady=5)
+        tk.Button(self.frame, text="Upload Excel A (from Evolution)", command=self.load_file_a).pack(pady=2)
+        tk.Button(self.frame, text="Upload Excel B (Reconciliation)", command=self.load_file_b).pack(pady=2)
 
-    # Excel B
-    file_b_var = tk.StringVar()
-    ttk.Label(win, text="Upload Excel B (9500 Reconciliation)").pack(anchor="w", padx=10, pady=(20, 0))
-    ttk.Entry(win, textvariable=file_b_var, width=80, state="readonly").pack(padx=10)
-    tree_b = ttk.Treeview(win)
-    tree_b.pack(padx=10, pady=5, fill="both", expand=True)
-    ttk.Button(win, text="Browse B", bootstyle="primary", command=lambda: load_excel(tree_b, file_b_var)).pack(padx=10, pady=5)
+        tk.Button(self.frame, text="🔍 Compare", command=self.compare).pack(pady=10)
+
+        self.result_label = tk.Label(self.frame, text="")
+        self.result_label.pack()
+
+        tk.Button(self.frame, text="⬇️ Export 'Only in A'", command=self.export_a).pack(pady=2)
+        tk.Button(self.frame, text="⬇️ Export 'Only in B'", command=self.export_b).pack(pady=2)
+        tk.Button(self.frame, text="🔙 Back", command=self.go_back).pack(pady=10)
+
+    def go_back(self):
+        self.frame.master.main_menu()
+
+    def load_file_a(self):
+        path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
+        if not path:
+            return
+        self.df_a = pd.read_excel(path).iloc[:, :self.column_var.get()]
+        self.clean_dataframe(self.df_a)
+        messagebox.showinfo("Success", "Excel A loaded successfully.")
+
+    def load_file_b(self):
+        path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
+        if not path:
+            return
+        xls = pd.ExcelFile(path)
+        sheet = xls.sheet_names[0]
+        self.df_b = pd.read_excel(path, sheet_name=sheet).iloc[:, :self.column_var.get()]
+        self.clean_dataframe(self.df_b)
+        messagebox.showinfo("Success", f"Excel B sheet '{sheet}' loaded.")
+
+    def clean_dataframe(self, df):
+        df.columns = df.columns.str.strip()
+        for col in ["Debit", "Credit"]:
+            if col in df.columns:
+                df[col] = (
+                    df[col].astype(str)
+                    .str.replace("R", "")
+                    .str.replace(",", "")
+                    .str.strip()
+                    .replace(["", "None", "nan"], "0")
+                    .fillna("0")
+                    .astype(float)
+                    .round(2)
+                )
+        for ref_col in ["Reference", "Reference 2"]:
+            if ref_col in df.columns:
+                df[ref_col] = (
+                    df[ref_col].astype(str)
+                    .str.strip()
+                    .str.lstrip("0")
+                    .str.replace(r"\.0$", "", regex=True)
+                )
+
+        if "Date" in df.columns:
+            df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
+
+        if "Description" in df.columns:
+            df["Description"] = df["Description"].astype(str).str.lstrip("0").str.strip()
+
+    def compare(self):
+        if self.df_a is None or self.df_b is None:
+            messagebox.showwarning("Missing", "Please upload both Excel files first.")
+            return
+
+        df_a_clean = self.df_a.dropna(how="all").fillna("")
+        df_b_clean = self.df_b.dropna(how="all").fillna("")
+
+        for col in df_a_clean.columns:
+            if "date" in col.lower():
+                df_a_clean[col] = pd.to_datetime(df_a_clean[col], errors="coerce").dt.date
+                df_b_clean[col] = pd.to_datetime(df_b_clean[col], errors="coerce").dt.date
+            elif col.lower() in ["debit", "credit"]:
+                df_a_clean[col] = pd.to_numeric(df_a_clean[col], errors="coerce").round(2)
+                df_b_clean[col] = pd.to_numeric(df_b_clean[col], errors="coerce").round(2)
+            else:
+                df_a_clean[col] = df_a_clean[col].astype(str)
+                df_b_clean[col] = df_b_clean[col].astype(str)
+
+        self.only_in_a = pd.merge(df_a_clean, df_b_clean, how="outer", indicator=True)\
+                          .query("_merge == 'left_only'").drop(columns=["_merge"])
+        self.only_in_b = pd.merge(df_b_clean, df_a_clean, how="outer", indicator=True)\
+                          .query("_merge == 'left_only'").drop(columns=["_merge"])
+
+        result = f"✅ Compared!\nOnly in A: {len(self.only_in_a)} rows\nOnly in B: {len(self.only_in_b)} rows"
+        self.result_label.config(text=result)
+
+    def export_a(self):
+        if hasattr(self, "only_in_a") and not self.only_in_a.empty:
+            path = filedialog.asksaveasfilename(defaultextension=".xlsx")
+            if path:
+                self.only_in_a.to_excel(path, index=False)
+                messagebox.showinfo("Exported", f"Saved to {path}")
+
+    def export_b(self):
+        if hasattr(self, "only_in_b") and not self.only_in_b.empty:
+            path = filedialog.asksaveasfilename(defaultextension=".xlsx")
+            if path:
+                self.only_in_b.to_excel(path, index=False)
+                messagebox.showinfo("Exported", f"Saved to {path}")
 
 
-# Create the main window with a Bootstrap theme
-root = ttk.Window(themename="cosmo")
-root.title("Finance Team")
-root.geometry("800x400")
+class FinanceApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Finance Automation - 9500 Toolkit")
+        self.main_menu()
 
-# Create the Notebook (tabbed interface)
-notebook = Notebook(root, bootstyle="info")
-notebook.pack(fill="both", expand=True, padx=10, pady=10)
+    def main_menu(self):
+        self.clear_window()
+        tk.Label(self.root, text="📁 9500 Toolkit", font=("Arial", 16)).pack(pady=10)
 
-# Create frames for each tab
-tab1 = ttk.Frame(notebook)
-tab2 = ttk.Frame(notebook)
-tab3 = ttk.Frame(notebook)
-tab4 = ttk.Frame(notebook)
-tab5 = ttk.Frame(notebook)
-tab6 = ttk.Frame(notebook)
+        tk.Button(self.root, text="📊 Compare 9500", command=self.compare_9500_ui, width=30).pack(pady=5)
+        tk.Button(self.root, text="🏦 Import Deposits", command=self.import_deposits_ui, width=30).pack(pady=5)
+        tk.Button(self.root, text="Exit", command=self.root.quit).pack(pady=20)
 
-# Add tabs to the notebook
-notebook.add(tab1, text="Home")
-notebook.add(tab2, text="Jo-Zelle")
-notebook.add(tab3, text="Christo")
-notebook.add(tab4, text="Mariska")
-notebook.add(tab5, text="Lizelle")
-notebook.add(tab6, text="Settings")
+    def compare_9500_ui(self):
+        self.clear_window()
+        Compare9500App(self.root)
 
-# Add buttons to Tab One
-ttk.Button(tab1, text='primary', bootstyle=PRIMARY).pack(side=LEFT, padx=5, pady=5)
-ttk.Button(tab1, text='secondary', bootstyle=SECONDARY).pack(side=LEFT, padx=5, pady=5)
-ttk.Button(tab1, text='success', bootstyle=SUCCESS).pack(side=LEFT, padx=5, pady=5)
-ttk.Button(tab1, text='info', bootstyle=INFO).pack(side=LEFT, padx=5, pady=5)
-ttk.Button(tab1, text='warning', bootstyle=WARNING).pack(side=LEFT, padx=5, pady=5)
-ttk.Button(tab1, text='danger', bootstyle=DANGER).pack(side=LEFT, padx=5, pady=5)
-ttk.Button(tab1, text='light', bootstyle=LIGHT).pack(side=LEFT, padx=5, pady=5)
-ttk.Button(tab1, text='dark', bootstyle=DARK).pack(side=LEFT, padx=5, pady=5)
+    def import_deposits_ui(self):
+        self.clear_window()
+        DepositImportApp(self.root)
 
-# Add different buttons to Tab Two
-ttk.Button(tab2, text="Compare", bootstyle=SUCCESS).pack(side=LEFT, padx=5, pady=10)
-ttk.Button(tab2, text="Outline Button", bootstyle=(SUCCESS, OUTLINE)).pack(side=LEFT, padx=5, pady=10)
+    def clear_window(self):
+        for widget in self.root.winfo_children():
+            widget.destroy()
 
-# Add different buttons to Mariska
-ttk.Button(tab4, text="Compare 9500", bootstyle=SUCCESS, command=open_compare_9500_window).pack(side=LEFT, padx=5, pady=10)
 
-ttk.Button(tab4, text="9500 Import", bootstyle=(SUCCESS, OUTLINE)).pack(side=LEFT, padx=5, pady=10)
-
-# Run the app
-root.mainloop()
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.geometry("500x450")
+    app = FinanceApp(root)
+    root.mainloop()

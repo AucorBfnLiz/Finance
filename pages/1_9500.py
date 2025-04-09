@@ -10,16 +10,16 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.stop()
 
 
-st.set_page_config(page_title="Mariska's Page", page_icon="📑")
+st.set_page_config(page_title="9500 Page", page_icon="📑")
 
-st.sidebar.title("📂 Mariska Menu")
+st.sidebar.title("📂  Menu")
 selection = st.sidebar.radio("Select a section:", 
                             ["🏠 Overview", "📊 Compare Excel 9500", "🏦 Deposit Import"])
 
 # Simple menu-based routing
 if selection == "🏠 Overview":
     st.title("🏠 Overview")
-    st.write("Welcome to Mariska's main page.")
+    st.write("Welcome to 9500's main page.")
     st.write("Use the sidebar to navigate to the different sections.")
 
     st.markdown("---")
