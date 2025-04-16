@@ -2,14 +2,6 @@ import streamlit as st
 from mariska_pages.compare_9500 import compare_9500
 from mariska_pages.import_deposits import import_deposits
 
-
-
-
-if "logged_in" not in st.session_state or not st.session_state.logged_in:
-    st.warning("🔐 You must log in to view this page.")
-    st.stop()
-
-
 st.set_page_config(page_title="9500 Page", page_icon="📑")
 
 st.sidebar.title("📂  Menu")
@@ -32,9 +24,8 @@ if selection == "🏠 Overview":
       Convert a list of deposit transactions from Excel into a CSV file ready for import into the Evolution cashbook system.
     """)
 
-
-if selection == "📊 Compare Excel 9500":
+elif selection == "📊 Compare Excel 9500":
     compare_9500()
 
-if selection == "🏦 Deposit Import":
+elif selection == "🏦 Deposit Import":
     import_deposits()

@@ -23,23 +23,20 @@ def compare_9500():
     - **Sheet B** should ideally be **empty**. If not, it means that an item exists in both sheets but differs in one or more columns, preventing a match.
         """)
 
-    # Let user choose number of columns to compare
+    st.info("Note: Macro-enabled Excel files (.xlsm) are supported for data reading only. Macros will not be executed.")
+
     num_columns = st.number_input(
         " Number of columns to compare", min_value=1, max_value=50, value=9, step=1
     )
-    
-
 
     # === Upload 9500 from Evolution
     st.subheader("📥 Step 1: Upload 9500 Excel from Evolution")
-    file_a = st.file_uploader("Upload Excel A", type=["xlsx"], key="file_a")
-    
+    file_a = st.file_uploader("Upload Excel A", type=["xlsx", "xlsm"], key="file_a")
 
     if file_a:
-        df_a = pd.read_excel(file_a).iloc[:, :num_columns]
+        df_a = pd.read_excel(file_a, engine="openpyxl").iloc[:, :num_columns]
         df_a.columns = df_a.columns.str.strip()
 
-        # Clean 'Debit' and 'Credit'
         for col in ["Debit", "Credit"]:
             if col in df_a.columns:
                 df_a[col] = (
@@ -53,7 +50,6 @@ def compare_9500():
                     .round(2)
                 )
 
-        # Clean references
         for ref_col in ["Reference", "Reference 2"]:
             if ref_col in df_a.columns:
                 df_a[ref_col] = (
@@ -69,7 +65,6 @@ def compare_9500():
         if "Description" in df_a.columns:
             df_a["Description"] = df_a["Description"].astype(str).str.lstrip("0").str.strip()
 
-        # Fill blanks in other columns with "0"
         for col in df_a.columns:
             if col not in ["Debit", "Credit", "Date"]:
                 df_a[col] = (
@@ -79,9 +74,7 @@ def compare_9500():
                     .fillna("0")
                 )
 
-        # Remove rows where key fields are empty or 0
         required_cols = ["Date", "Reference 2", "Code", "Reference", "Description"]
-
         if all(col in df_a.columns for col in required_cols):
             df_a = df_a[~(
                 df_a[required_cols].apply(
@@ -93,21 +86,20 @@ def compare_9500():
                 )
             )]
 
-
         st.success("Excel A uploaded successfully.")
         st.markdown("**Preview of first 9 columns:**")
         st.dataframe(df_a)
 
     # === Upload 9500 Reconciliation File
     st.subheader("📥 Step 2: Upload 9500 Reconciliation and select the sheet")
-    file_b = st.file_uploader("Upload Excel B", type=["xlsx"], key="file_b")
+    file_b = st.file_uploader("Upload Excel B", type=["xlsx", "xlsm"], key="file_b")
 
     if file_b:
-        xls_b = pd.ExcelFile(file_b)
+        xls_b = pd.ExcelFile(file_b, engine="openpyxl")
         sheet_names_b = xls_b.sheet_names
         selected_sheet_b = st.selectbox("Select a sheet from Excel B:", sheet_names_b)
 
-        df_b = pd.read_excel(file_b, sheet_name=selected_sheet_b).iloc[:, :num_columns]
+        df_b = pd.read_excel(file_b, sheet_name=selected_sheet_b, engine="openpyxl").iloc[:, :num_columns]
         df_b.columns = df_b.columns.str.strip()
 
         for col in ["Debit", "Credit"]:
@@ -148,7 +140,6 @@ def compare_9500():
                 )
 
         required_cols = ["Date", "Reference 2", "Code", "Reference", "Description"]
-
         if all(col in df_b.columns for col in required_cols):
             df_b = df_b[~(
                 df_b[required_cols].apply(
@@ -160,12 +151,11 @@ def compare_9500():
                 )
             )]
 
-
         st.success(f"Sheet '{selected_sheet_b}' from Excel B uploaded successfully.")
         st.markdown("**Preview of first 9 columns:**")
         st.dataframe(df_b)
 
-       # === Comparison ===
+    # === Comparison ===
     st.subheader("🔍 Step 3: Compare the Data")
     if file_a and file_b:
         df_a_clean = df_a.dropna(how="all").fillna("")
@@ -192,7 +182,6 @@ def compare_9500():
         st.markdown(f"### 📌 Rows that are **only in Excel B**: {len(only_in_b)}")
         st.dataframe(only_in_b)
 
-        # Export options
         def to_excel(df, sheet_name="Sheet1"):
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -200,7 +189,6 @@ def compare_9500():
             return output.getvalue()
 
         st.markdown("### ⬇️ Download Differences")
-
         if not only_in_a.empty:
             st.download_button(
                 label="📥 Download: Only in Excel A",
@@ -217,11 +205,8 @@ def compare_9500():
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
-        # --- Extract Code Button ---
         if st.button("🧾 Extract Code"):
             df_a_clean["Note"] = df_a_clean["Description"]
-
-            # Remove specific phrases from Note
             phrases_to_remove = [
                 "FNB APP PAYMENT FROM",
                 "ACB CREDIT CAPITEC",
@@ -230,14 +215,12 @@ def compare_9500():
             for phrase in phrases_to_remove:
                 df_a_clean["Note"] = df_a_clean["Note"].str.replace(phrase, "", regex=False).str.strip()
 
-            # Add TOTAL column
             if "Debit" in df_a_clean.columns and "Credit" in df_a_clean.columns:
                 df_a_clean["TOTAL"] = df_a_clean["Debit"] + df_a_clean["Credit"]
 
             st.success("Code extracted successfully. 'Note' and 'TOTAL' columns added.")
             st.dataframe(df_a_clean.head(10))
 
-            # ✅ Show download button after extraction
             st.markdown("### ⬇️ Download Extracted Data")
             st.download_button(
                 label="📥 Download Extracted Excel A",
